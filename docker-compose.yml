@@ -1,10 +1,14 @@
 services:
   netbox: &netbox
     image: docker.io/netboxcommunity/netbox:${VERSION-v4.4-3.4.1}
+    restart: unless-stopped
     depends_on:
-      - postgres
-      - redis
-      - redis-cache
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
     env_file: env/netbox.env
     user: "unit:root"
     healthcheck:
@@ -17,8 +21,10 @@ services:
       - netbox-media-files:/opt/netbox/netbox/media:rw
       - netbox-reports-files:/opt/netbox/netbox/reports:rw
       - netbox-scripts-files:/opt/netbox/netbox/scripts:rw
+
   netbox-worker:
     <<: *netbox
+    restart: unless-stopped
     depends_on:
       netbox:
         condition: service_healthy
@@ -35,6 +41,7 @@ services:
   # postgres
   postgres:
     image: docker.io/postgres:17-alpine
+    restart: unless-stopped
     healthcheck:
       test: pg_isready -q -t 2 -d $$POSTGRES_DB -U $$POSTGRES_USER
       start_period: 20s
@@ -48,10 +55,11 @@ services:
   # redis
   redis:
     image: docker.io/valkey/valkey:8.1-alpine
+    restart: unless-stopped
     command:
       - sh
-      - -c # this is to evaluate the $REDIS_PASSWORD from the env
-      - valkey-server --appendonly yes --requirepass $$REDIS_PASSWORD ## $$ because of docker-compose
+      - -c
+      - valkey-server --appendonly yes --requirepass $$REDIS_PASSWORD
     healthcheck: &redis-healthcheck
       test: '[ $$(valkey-cli --pass "$${REDIS_PASSWORD}" ping) = ''PONG'' ]'
       start_period: 5s
@@ -61,12 +69,14 @@ services:
     env_file: env/redis.env
     volumes:
       - netbox-redis-data:/data
+
   redis-cache:
     image: docker.io/valkey/valkey:8.1-alpine
+    restart: unless-stopped
     command:
       - sh
-      - -c # this is to evaluate the $REDIS_PASSWORD from the env
-      - valkey-server --requirepass $$REDIS_PASSWORD ## $$ because of docker-compose
+      - -c
+      - valkey-server --requirepass $$REDIS_PASSWORD
     healthcheck: *redis-healthcheck
     env_file: env/redis-cache.env
     volumes:
